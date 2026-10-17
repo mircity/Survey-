@@ -15,8 +15,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect-source:
+    runs-on: ubuntu-latest
+    outputs:
+      has_source: ${{ steps.check.outputs.has_source }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        shell: bash
+        run: |
+          if [[ -f index.html && -f manifest.json && -f sw.js && -f icon-192.png && -f icon-512.png ]]; then
+            echo "has_source=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_source=false" >> "$GITHUB_OUTPUT"
+            echo "Source app files are not all present yet; build jobs will be skipped."
+          fi
+
   android-apk:
-    if: ${{ hashFiles('index.html', 'manifest.json', 'sw.js') != '' }}
+    needs: detect-source
+    if: ${{ needs.detect-source.outputs.has_source == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -60,7 +77,8 @@ jobs:
           retention-days: 30
 
   deploy-pwa:
-    if: ${{ hashFiles('index.html', 'manifest.json', 'sw.js') != '' }}
+    needs: detect-source
+    if: ${{ needs.detect-source.outputs.has_source == 'true' }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
