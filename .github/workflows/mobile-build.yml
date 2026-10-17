@@ -1,0 +1,84 @@
+name: Heritage Survey Mobile Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: heritage-mobile-build
+  cancel-in-progress: true
+
+jobs:
+  android-apk:
+    if: ${{ hashFiles('index.html', 'manifest.json', 'sw.js') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Prepare offline web app
+        run: |
+          mkdir -p www
+          cp index.html manifest.json sw.js icon-192.png icon-512.png www/
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "com.heritage.survey",
+            "appName": "Heritage Land Survey",
+            "webDir": "www",
+            "bundledWebRuntime": false,
+            "android": {
+              "allowMixedContent": false
+            }
+          }
+          EOF
+          npm init -y
+          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
+          npx cap add android
+          npx cap sync android
+      - name: Build Android APK
+        run: cd android && ./gradlew assembleDebug
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Heritage-Survey-Android-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  deploy-pwa:
+    if: ${{ hashFiles('index.html', 'manifest.json', 'sw.js') != '' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Prepare PWA files
+        run: |
+          mkdir -p _site
+          cp index.html manifest.json sw.js icon-192.png icon-512.png _site/
+          touch _site/.nojekyll
+      - name: Upload PWA artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
