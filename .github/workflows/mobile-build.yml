@@ -8,7 +8,6 @@ on:
 permissions:
   contents: read
 
-# Do not cancel a running build/deploy when a new commit arrives.
 concurrency:
   group: heritage-survey-release
   cancel-in-progress: false
@@ -104,14 +103,12 @@ jobs:
         run: |
           mkdir -p site
           cp index.html manifest.json sw.js icon-192.png icon-512.png site/
-          # Preserve the app's own offline paths while publishing under /Survey-/
           test -s site/index.html
           test -s site/manifest.json
           test -s site/sw.js
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
+      # Pages must be enabled once by a repository owner/admin in Settings > Pages.
+      # Avoid configure-pages enablement=true because it tries to create the Pages
+      # site through the token and can fail with "Resource not accessible by integration".
       - name: Upload website artifact
         uses: actions/upload-pages-artifact@v3
         with:
