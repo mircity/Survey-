@@ -106,13 +106,14 @@ jobs:
           test -s site/index.html
           test -s site/manifest.json
           test -s site/sw.js
-      # Pages must be enabled once by a repository owner/admin in Settings > Pages.
-      # Avoid configure-pages enablement=true because it tries to create the Pages
-      # site through the token and can fail with "Resource not accessible by integration".
+      # Use a repository-specific artifact name to avoid collisions with other workflows.
       - name: Upload website artifact
         uses: actions/upload-pages-artifact@v3
         with:
+          name: survey-pages
           path: site
       - name: Deploy website
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: survey-pages
