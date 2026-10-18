@@ -99,7 +99,7 @@ jobs:
           retention-days: 30
 
   deploy-pwa:
-    needs: detect-source
+    needs: [detect-source, android-apk]
     if: ${{ needs.detect-source.outputs.has_source == 'true' }}
     runs-on: ubuntu-latest
     permissions:
@@ -112,11 +112,17 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+      - name: Download Android APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Heritage-Survey-Android-APK
+          path: apk-artifact
       - name: Prepare website files
         shell: bash
         run: |
           mkdir -p site
           cp index.html manifest.json sw.js icon-192.png icon-512.png site/
+          cp apk-artifact/app-debug.apk site/Heritage-Survey.apk
           test -s site/index.html
           test -s site/manifest.json
           test -s site/sw.js
