@@ -74,6 +74,20 @@ jobs:
           npm install --no-audit --no-fund @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
           npx cap add android
           npx cap sync android
+          # Declare Android runtime permissions required by navigator.geolocation.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+          permissions = '''    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+              <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+              <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+          '''
+          if "android.permission.ACCESS_FINE_LOCATION" not in s:
+              s = s.replace("    <application", permissions + "\n    <application", 1)
+              p.write_text(s)
+          print("Android location permissions configured")
+          PY
       - name: Build Android APK
         run: cd android && ./gradlew --no-daemon assembleDebug
       - name: Upload installable APK
