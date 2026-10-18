@@ -1,4 +1,4 @@
-name: Heritage Survey Mobile Build
+name: Heritage Survey Build and Deploy
 
 on:
   push:
@@ -8,9 +8,10 @@ on:
 permissions:
   contents: read
 
+# Do not cancel a running build/deploy when a new commit arrives.
 concurrency:
-  group: heritage-mobile-build
-  cancel-in-progress: true
+  group: heritage-survey-release
+  cancel-in-progress: false
 
 jobs:
   detect-source:
@@ -18,15 +19,24 @@ jobs:
     outputs:
       has_source: ${{ steps.check.outputs.has_source }}
     steps:
-      - uses: actions/checkout@v4
-      - id: check
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Verify app files
+        id: check
         shell: bash
         run: |
-          if [[ -f index.html && -f manifest.json && -f sw.js && -f icon-192.png && -f icon-512.png ]]; then
+          missing=0
+          for file in index.html manifest.json sw.js icon-192.png icon-512.png; do
+            if [[ ! -f "$file" ]]; then
+              echo "Missing required file: $file"
+              missing=1
+            fi
+          done
+          if [[ "$missing" -eq 0 ]]; then
             echo "has_source=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_source=false" >> "$GITHUB_OUTPUT"
-            echo "Source app files are not all present yet; build jobs will be skipped."
+            exit 1
           fi
 
   android-apk:
@@ -45,7 +55,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
       - name: Prepare offline web app
+        shell: bash
         run: |
           mkdir -p www
           cp index.html manifest.json sw.js icon-192.png icon-512.png www/
@@ -61,11 +73,11 @@ jobs:
           }
           EOF
           npm init -y
-          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
+          npm install --no-audit --no-fund @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
           npx cap add android
           npx cap sync android
       - name: Build Android APK
-        run: cd android && ./gradlew assembleDebug
+        run: cd android && ./gradlew --no-daemon assembleDebug
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
@@ -73,3 +85,36 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
+
+  deploy-pwa:
+    needs: detect-source
+    if: ${{ needs.detect-source.outputs.has_source == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Prepare website files
+        shell: bash
+        run: |
+          mkdir -p site
+          cp index.html manifest.json sw.js icon-192.png icon-512.png site/
+          # Preserve the app's own offline paths while publishing under /Survey-/
+          test -s site/index.html
+          test -s site/manifest.json
+          test -s site/sw.js
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload website artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Deploy website
+        id: deployment
+        uses: actions/deploy-pages@v4
